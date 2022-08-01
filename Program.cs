@@ -32,9 +32,9 @@ prompt = prompt.Replace("\n", "\\n");
 // so far, this "just works" for me. It's almost never wrong
 var json = $@"{{'model': 'text-davinci-002',
 'prompt': '{prompt}',
-'temperature': 0.7,
+'temperature': 0.3,
 'max_tokens': 256,
-'top_p': 1,
+'top_p': 0.7,
 'frequency_penalty': 0,
 'presence_penalty': 0 }}";
 
