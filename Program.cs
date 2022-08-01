@@ -2,16 +2,16 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-// if args is empty write to the console explaining, and quit
-if (args.Length == 0)
-{
-    Console.WriteLine("No arguments given");
-    return;
-}
-
-// make a prompt string from the first element of args
+ // if args is empty write to the console explaining, and quit
+ if (args.Length == 0)
+ {
+     Console.WriteLine("No arguments given");
+     return;
+ }
+ 
 var initPrompt = string.Join(" ", args);
 
 string prompt = null;
@@ -30,7 +30,9 @@ prompt = prompt.Replace("\n", "\\n");
 
 // I didn't make these configurable because to be honest
 // so far, this "just works" for me. It's almost never wrong
-var json = $@"{{'model': 'text-davinci-002',
+var json = $@"{{
+'stream' : true,
+'model': 'text-davinci-002',
 'prompt': '{prompt}',
 'temperature': 0.3,
 'max_tokens': 256,
@@ -44,6 +46,7 @@ json = json.Replace("\n", "")
 
 // load in const string key string from system environment variables
 var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+
 //if key is null or empty or shorter than 10 characters, throw an exception and write error to console
 if (string.IsNullOrEmpty(key) || key.Length < 10)
 {
@@ -60,22 +63,36 @@ request.Content = new StringContent(json, Encoding.UTF8, "application/json");
 var client = new HttpClient();
 var result = await client.SendAsync(request);
 result.EnsureSuccessStatusCode(); // throw exception if not successful
-var response = await result.Content.ReadAsStringAsync();
 
+var stream = await result.Content.ReadAsStreamAsync();
 
-var root = JObject.Parse(response);
+using var reader = new StreamReader(stream);
 
-if (root != null)
+// turn AutoFlush to true for the console to write to the console immediately
+Console.SetOut(new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
+ 
+ while (true)
 {
-    try
+    var line = await reader.ReadLineAsync();
+
+    if (line.Contains("[DONE]"))
+        break;
+    
+    // if line is empty continue
+    if (!string.IsNullOrEmpty(line))
     {
-        var text = root["choices"][0]["text"].Value<string>();
-        Console.Write(text.Trim());
-    }
-    catch (Exception e)
-    {
-        Console.WriteLine("Couldn't parse the response JSON");
-        Console.WriteLine(root.ToString());
-        throw;
-    }
+        // surround line with { and }
+        line = $"{{{line}}}";
+        
+        // change encoding of line to UTF8
+        line = Encoding.UTF8.GetString(Encoding.Default.GetBytes(line));
+
+        var root = JsonConvert.DeserializeObject<dynamic>(line);
+
+        if (root?.data != null)
+        {
+            Console.Write(root.data.choices[0].text);
+            Thread.Sleep(30);
+        }    
+    } 
 }
